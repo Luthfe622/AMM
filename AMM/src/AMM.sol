@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/access/AccessControl.sol"; // This allows role-based access control through _grantRole() and the modifier onlyRole
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol"; // This contract needs to interact with ERC20 tokens
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract AMM is AccessControl {
     bytes32 public constant LP_ROLE = keccak256("LP_ROLE");
@@ -15,9 +15,6 @@ contract AMM is AccessControl {
     event LiquidityProvision(address indexed _from, uint256 AQty, uint256 BQty);
     event Withdrawal(address indexed _from, address indexed recipient, uint256 AQty, uint256 BQty);
 
-    /*
-        Constructor sets the addresses of the two tokens
-    */
     constructor(address _tokenA, address _tokenB) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(LP_ROLE, msg.sender);
@@ -38,24 +35,16 @@ contract AMM is AccessControl {
         }
     }
 
-    /*
-        The main trading functions
-        
-        User provides sellToken and sellAmount
-
-        The contract must calculate buyAmount using the formula:
-    */
     function tradeTokens(address sellToken, uint256 sellAmount) public {
         require(invariant > 0, 'Invariant must be nonzero');
         require(sellToken == tokenA || sellToken == tokenB, 'Invalid token');
         require(sellAmount > 0, 'Cannot trade 0');
-        require(invariant > 0, 'No liquidity');
 
         address buyToken = (sellToken == tokenA) ? tokenB : tokenA;
         uint256 sellTokenReserve = ERC20(sellToken).balanceOf(address(this));
         uint256 buyTokenReserve = ERC20(buyToken).balanceOf(address(this));
 
-        uint256 amountWithFee = sellAmount * (10000 - feebps) / 10000;
+        uint256 amountWithFee = (sellAmount * (10000 - feebps)) / 10000;
         uint256 buyAmount = (amountWithFee * buyTokenReserve) / (sellTokenReserve + amountWithFee);
 
         require(ERC20(sellToken).transferFrom(msg.sender, address(this), sellAmount), 'Transfer failed');
@@ -63,14 +52,9 @@ contract AMM is AccessControl {
 
         emit Swap(sellToken, buyToken, sellAmount, buyAmount);
 
-        uint256 new_invariant = ERC20(tokenA).balanceOf(address(this)) * ERC20(tokenB).balanceOf(address(this));
-        require(new_invariant >= invariant, 'Bad trade');
-        invariant = new_invariant;
+        invariant = ERC20(tokenA).balanceOf(address(this)) * ERC20(tokenB).balanceOf(address(this));
     }
 
-    /*
-        Use the ERC20 transferFrom to "pull" amtA of tokenA and amtB of tokenB from the sender
-    */
     function provideLiquidity(uint256 amtA, uint256 amtB) public {
         require(amtA > 0 || amtB > 0, 'Cannot provide 0 liquidity');
 
@@ -88,10 +72,6 @@ contract AMM is AccessControl {
         emit LiquidityProvision(msg.sender, amtA, amtB);
     }
 
-    /*
-        Use the ERC20 transfer function to send amtA of tokenA and amtB of tokenB to the target recipient
-        The modifier onlyRole(LP_ROLE)
-    */
     function withdrawLiquidity(address recipient, uint256 amtA, uint256 amtB) public onlyRole(LP_ROLE) {
         require(amtA > 0 || amtB > 0, 'Cannot withdraw 0');
         require(recipient != address(0), 'Cannot withdraw to 0 address');
@@ -107,4 +87,5 @@ contract AMM is AccessControl {
         emit Withdrawal(msg.sender, recipient, amtA, amtB);
     }
 }
+
 
